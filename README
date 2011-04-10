@@ -57,6 +57,10 @@ hplaylist will not delete any existing files on your player. It also won't clobb
 files with the same name that already exist. I usually just delete everything using
 the Finder, and run hplaylist to set things up afresh.
 
+=== Github page ===
+
+https://github.com/catamorphism/hplaylist
+
 === Known issues ===
 
 Filenames containing special characters do not currently get escaped correctly. Such files
