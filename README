@@ -1,0 +1,67 @@
+=== What is hplaylist? ===
+
+This is a utility for extracting the contents of an iTunes playlist
+and copying the associated files to an external MP3 player. I've
+tested this with a Sansa Clip running Rockbox, but any player that
+mounts like a USB disk and uses a similar directory structure should
+work. It assumes that playlists live in a folder called "Playlists"
+in the root player directory and music files live in a folder called
+"Music" in the root player directory. The Music folder can be (and is) 
+organized according to artist and album. It should be easy to change
+the code to reflect a different directory structure. Patches to make
+this configurable rather than requiring source modifications would be
+welcome.
+
+The AppleScript contained in Applescript.hs does all the real work of
+dumping the contents of an iTunes playlist to a file. This code is
+adapter from Bery Rinaldo's "Export Playlist to M3U" script, found at:
+http://homepage.mac.com/beryrinaldo/AudioTron/Export_Playlist_to_M3U/
+
+Due to the use of AppleScript, I expect that this application is Mac-
+only. But I would welcome patches to make it work on other platforms.
+
+=== Installation ===
+
+$ runhaskell Setup configure --configure-option=--music-player-root=/Volumes/SANSA\ CLIP \
+   --configure-option=--m4a-dir=/Users/tjc/converted
+$ runhaskell Setup build
+$ sudo runhaskell Setup install
+
+In place of "/Volumes/SANSA\ CLIP", substitute where your machine mounts your music player.
+In place of /Users/tjc/converted, substitute a cache directory containing .mp3 files. If you
+supply this config-time option and your playlist contains .m4a files, hplaylist will look
+in the cache directory for a corresponding .mp3 files instead of in wherever iTunes claims
+the file is. This is meant to support devices that can't play .m4a files. You can omit
+the --m4a-dir option, but you must supply the --music-player-root option.
+
+=== Usage ===
+
+$ hplaylist "gym February 2011"
+
+where the name in quotes is the name of an iTunes playlist. You can also do:
+
+$ hplaylist --dry-run "gym February 2011"
+
+and instead of copying files directly to your device, hplaylist will generate a
+shell script that, when executed, copies all the files in the "gym February 2011"
+playlist. For example, hplaylist might print out:
+
+To copy the files, execute the script /var/folders/Ig/Ig9WMUQwHsWDznqEdIsAfU+++TI/-Tmp-/hplaylist_copyit5084
+
+and then you could read the file /var/folders/Ig/Ig9WMUQwHsWDznqEdIsAfU+++TI/-Tmp-/hplaylist_copyit5084 
+before you execute it, to make sure everything looks OK.
+
+=== Gotchas ===
+
+hplaylist will not delete any existing files on your player. It also won't clobber
+files with the same name that already exist. I usually just delete everything using
+the Finder, and run hplaylist to set things up afresh.
+
+=== Known issues ===
+
+Filenames containing special characters do not currently get escaped correctly. Such files
+get ignored. You'll have to rename your Moxy Früvoustracks or copy them by hand.
+ 
+=== Further questions ===
+
+Patches, bug reports: Tim Chevalier <chevalier@alum.wellesley.edu>
