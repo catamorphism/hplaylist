@@ -1,8 +1,11 @@
 {-
       TODO
-       Rewrite to copy files using system calls rather than by creating a shell script.
-       (Still want a --dry-run option.)
-       Reason: Unicode works transparently w/ filesystem calls, but not in shell.
+       * might be good to copy files using system calls rather than by creating a shell script. (Wouldn't have to use wildcards for Unicode characters)
+       * flag to delete files
+       * don't use system temp directory (have a flag to specify the name of the output script file)
+       * add a --quiet flag
+       * filter out some of the rsync output
+       
 -}
 
 {- 
@@ -97,16 +100,12 @@ generateCopyScript isDryRun playlistNames = do
   debug (show allMusicFiles)
   mapM_ fixPaths (fst (unzip allMusicFiles))
   (copyScriptName,hdl) <- mkTempFileName "copyit"
-  let copyScript = "#!/bin/sh\n" ++ concatMap (\ (playlistFn,songs) -> 
--- --modify-window=2 allows us to not re-copy files whose mod times
--- differ by up to 2 seconds. this is important because FAT filesystems
--- have a 2-second resolution
--- add -vi to the rsync options for debugging
-                        (("\nrsync -tua -vv --out-format='%i %f%L --modify-window=2 --no-perms " ++ escape playlistFn ++ " " ++ escape musicPlayerPlaylistRoot ++ "\n")++
+  let copyScript = "#!/bin/bash\n" ++ concatMap (\ (playlistFn,songs) -> 
+                        (rsyncCommand playlistFn musicPlayerPlaylistRoot ++
                         concatMap (\ s -> let (artist,album,_) = albumArtistTrack s
-                                              parent = escape $ musicPlayerRoot </> musicSubdir </> artist </> album in
-                                            "mkdir -p " ++ parent ++ "\n"
-                                            ++ "rsync -tua -vv --out-format='%i %f%L' --modify-window=2 --no-perms " ++ escape s ++ " " ++ parent ++ "\n") songs))
+                                              parent = musicPlayerRoot </> musicSubdir </> artist </> album in
+                                              "mkdir -p " ++ (escape parent) ++ "\n"
+                                              ++ rsyncCommand s parent) songs))
                          allMusicFiles
   hPutStrLn hdl copyScript
   hClose hdl
