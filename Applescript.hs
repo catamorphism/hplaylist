@@ -32,7 +32,7 @@ playlistScript in_name out_name =
     tell application \"iTunes\"\n\
      set the playlist_text to \"\"\n\
      set the playlist_name to \"" ++ in_name ++ "\"" ++
-     "\nset the target_file to POSIX file \"" ++ out_name  ++ "\" as text" ++
+     "\nset the target_file to POSIX file \"" ++ out_name  ++ "\" as Unicode text" ++
       "\ntell playlist playlist_name\n\
        \nset the track_count to the count of tracks\n\
       \nend tell\n\
@@ -61,7 +61,7 @@ playlistScript in_name out_name =
 
   "on write_to_file(this_data, target_file)\n\
   try\n\
-    set the target_file to the target_file as text\n\
+    set the target_file to the target_file as Unicode text\n\
     set the open_target_file to open for access file target_file with write permission\n\
     set eof open_target_file to 0\n\
     write this_data to the open_target_file\n\
