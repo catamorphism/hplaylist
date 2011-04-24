@@ -55,9 +55,12 @@ playlistsToFilenames fs = do
           case exitCode of
             ExitSuccess -> do
               songFiles <- (liftM lines) $ readFile outFile
-              return (outFile,map m4aHack songFiles)
+              rewriteM4a outFile
+              return (outFile,
+                      map m4aHack songFiles)
             _           -> error ("Failed to extract playlist "
                              ++ playListName ++ ": " ++ show exitCode)
+        rewriteM4a = mapFile m4aHack 
         m4aHack fn | takeExtension fn == ".m4a" =
           case m4aParentDir of
             Just d ->
@@ -95,13 +98,15 @@ generateCopyScript isDryRun playlistNames = do
   mapM_ fixPaths (fst (unzip allMusicFiles))
   (copyScriptName,hdl) <- mkTempFileName "copyit"
   let copyScript = "#!/bin/sh\n" ++ concatMap (\ (playlistFn,songs) -> 
-                       (("echo Copying " ++ escape playlistFn ++
-                         "\ncp -n " ++ escape playlistFn ++ " " ++ escape musicPlayerPlaylistRoot ++ "\n")++
+-- --modify-window=2 allows us to not re-copy files whose mod times
+-- differ by up to 2 seconds. this is important because FAT filesystems
+-- have a 2-second resolution
+-- add -vi to the rsync options for debugging
+                        (("\nrsync -tua -vv --out-format='%i %f%L --modify-window=2 --no-perms " ++ escape playlistFn ++ " " ++ escape musicPlayerPlaylistRoot ++ "\n")++
                         concatMap (\ s -> let (artist,album,_) = albumArtistTrack s
                                               parent = escape $ musicPlayerRoot </> musicSubdir </> artist </> album in
-                                            "echo Copying " ++ escape s ++ "\n"
-                                            ++ "mkdir -p " ++ parent ++ "\n"
-                                            ++ "cp -n " ++ escape s ++ " " ++ parent ++ "\n") songs))
+                                            "mkdir -p " ++ parent ++ "\n"
+                                            ++ "rsync -tua -vv --out-format='%i %f%L' --modify-window=2 --no-perms " ++ escape s ++ " " ++ parent ++ "\n") songs))
                          allMusicFiles
   hPutStrLn hdl copyScript
   hClose hdl
