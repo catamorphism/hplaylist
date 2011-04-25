@@ -22,17 +22,17 @@ mapFile f fp = do
   removeFile fp
   writeFile fp (unlines res)
 
-rsyncCommand :: FilePath -> FilePath -> String
-rsyncCommand src dst = intercalate " "
- (rsyncCommandName:(rsyncOptions ++ map escape [src, dst] ++ ["\n"]))
+rsyncCommand :: Bool -> FilePath -> FilePath -> String
+rsyncCommand quiet src dst = intercalate " "
+ (rsyncCommandName:(rsyncOptions quiet ++ map escape [src, dst] ++ ["\n"]))
 
 rsyncCommandName :: String
 rsyncCommandName = "rsync"
 
-rsyncOptions :: [String]
-rsyncOptions = ["-t", "-u", "-a", "-r", "-vv", 
+rsyncOptions :: Bool -> [String]
+rsyncOptions quiet = ["-t", "-u", "-a", "-r",
   "--out-format='%i %f%L'", "--modify-window=2",
-  "--no-perms"]
+  "--no-perms"] ++ [if quiet then "--quiet" else "-vv"]
 -- --modify-window=2 allows us to not re-copy files whose mod times
 -- differ by up to 2 seconds. this is important because FAT filesystems
 -- have a 2-second resolution

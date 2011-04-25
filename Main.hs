@@ -3,7 +3,6 @@
        * might be good to copy files using system calls rather than by creating a shell script. (Wouldn't have to use wildcards for Unicode characters)
        * flag to delete files
        * don't use system temp directory (have a flag to specify the name of the output script file)
-       * add a --quiet flag
        * filter out some of the rsync output
        
 -}
@@ -94,31 +93,30 @@ albumArtistTrack fn = (case reverse parts of
   _                      -> error ("error parsing filename " ++ show fn))
    where parts = splitPath fn
 
-generateCopyScript :: Bool -> [String] -> IO ()
-generateCopyScript isDryRun playlistNames = do
+generateCopyScript :: [Flag] -> [String] -> IO ()
+generateCopyScript flags playlistNames = do
   allMusicFiles <- playlistsToFilenames playlistNames
   debug (show allMusicFiles)
   mapM_ fixPaths (fst (unzip allMusicFiles))
   (copyScriptName,hdl) <- mkTempFileName "copyit"
   let copyScript = "#!/bin/bash\n" ++ concatMap (\ (playlistFn,songs) -> 
-                        (rsyncCommand playlistFn musicPlayerPlaylistRoot ++
+                        (rsyncCommand (isQuiet flags) playlistFn musicPlayerPlaylistRoot ++
                         concatMap (\ s -> let (artist,album,_) = albumArtistTrack s
                                               parent = musicPlayerRoot </> musicSubdir </> artist </> album in
                                               "mkdir -p " ++ (escape parent) ++ "\n"
-                                              ++ rsyncCommand s parent) songs))
+                                              ++ rsyncCommand (isQuiet flags) s parent) songs))
                          allMusicFiles
   hPutStrLn hdl copyScript
   hClose hdl
   makeExecutable copyScriptName
-  if isDryRun
+  if (isDryRun flags)
      then putStrLn ("To copy the files, execute the script " ++ copyScriptName)
      else do
        res <- system copyScriptName
        case res of
-          -- exit 1 just means that cp -n didn't copy a file that already existed
-         ExitFailure n | n /= 1 -> putStrLn ("An error occurred: " ++ show res) >>
-                          exitWith res
-         _ -> putStrLn ("Copied " ++ show (sum (map (length . snd)
+         ExitFailure _ -> putStrLn ("An error occurred: " ++ show res) >>
+                            exitWith res
+         _ -> putStrLn ("Processed " ++ show (sum (map (length . snd)
                           allMusicFiles)) ++ " files")
        
 -- :-(
@@ -152,19 +150,23 @@ main = do
     (opts, playlistNames, _) ->
        case playlistNames of
          [] -> putStrLn "You didn't give me any arguments, and that's fine!"
-         _  -> let isDryRun = getDryRun opts in
-                  debug ("playlists = " ++ show playlistNames) >>
-                    generateCopyScript isDryRun playlistNames
+         _  -> debug ("playlists = " ++ show playlistNames) >>
+                 generateCopyScript opts playlistNames
 
 options :: [OptDescr Flag]
 options = [Option ['d'] ["dry-run"] (NoArg DryRun)
-  "Don't copy any files to the music player, just generate a script to do so"]
+  "Don't copy any files to the music player, just generate a script to do so",
+           Option ['q'] ["quiet"] (NoArg Quiet)
+  "Don't print too much output"]
 
-data Flag = DryRun
+data Flag = DryRun | Quiet
+  deriving Eq
 
-getDryRun :: [Flag] -> Bool
-getDryRun (DryRun:_) = True
-getDryRun _          = False
+isDryRun :: [Flag] -> Bool
+isDryRun = (DryRun `elem`)
+
+isQuiet :: [Flag] -> Bool
+isQuiet = (Quiet `elem`)
 
 debug :: String -> IO ()
 debug s | dEBUG = putStrLn ("===\n" ++ s ++ "===")
