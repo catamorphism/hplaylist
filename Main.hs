@@ -1,4 +1,3 @@
-XXXX need to fix the README file
 {-
       TODO
        * might be good to copy files using system calls rather than by creating a shell script. (Wouldn't have to use wildcards for Unicode characters)
