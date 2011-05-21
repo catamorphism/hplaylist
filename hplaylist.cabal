@@ -15,6 +15,6 @@ cabal-version:       >=1.6
 
 Executable hplaylist
   Main-is: Main.hs
-  other-modules: Applescript Utils
+  other-modules: Applescript Utils Debug Flags
   Build-Depends: base >= 4 && < 5, filepath, directory, process
   ghc-options: -Wall
