@@ -45,12 +45,20 @@ generateConfigHs _ confFlags = do
   case getOpt Permute myOptions userConfigArgs of
     (opts,_,_) ->
       case findRoot opts of
-        Just dir -> writeConfigHs dir (findM4a opts)
+        Just dir -> let cacheDir = findM4a opts in
+                       (report dir cacheDir) >>
+                       (writeConfigHs dir (findM4a opts))
         Nothing -> (error $ "You must specify the destination "
                      ++ "directory for your music player, like so:\n"
                      ++ "--configure-option=--music-player-root="
                      ++ "/Volumes/SANSA\\ CLIPP")
   return emptyHookedBuildInfo
+
+report :: FilePath -> Maybe FilePath -> IO ()
+report root maybeCacheDir = do
+  putStrLn ("Set music player root directory to: " ++ root)
+  maybe (return ()) (\ fp ->
+    putStrLn ("Set .mp3 cache directory to: " ++ fp)) maybeCacheDir
 
 writeConfigHs :: FilePath -> Maybe FilePath -> IO ()
 writeConfigHs dir maybeDir = writeFile "Config.hs" 
