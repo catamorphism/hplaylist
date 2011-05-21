@@ -51,6 +51,19 @@ To copy the files, execute the script /var/folders/Ig/Ig9WMUQwHsWDznqEdIsAfU+++T
 and then you could read the file /var/folders/Ig/Ig9WMUQwHsWDznqEdIsAfU+++TI/-Tmp-/hplaylist_copyit5084 
 before you execute it, to make sure everything looks OK.
 
+==== Flags ====
+
+--dry-run doesn't change any files on your device, but rather,
+creates a shell script that can be executed to copy the files.
+
+--quiet suppresses most output from hplaylist.
+
+--keep-temp-files stops intermediate files from being
+deleted (mostly for developers).
+
+--temp-dir DIRECTORY attempts to store any files that are created
+in DIRECTORY. By default, hplaylist uses the current directory.
+
 === Gotchas ===
 
 hplaylist will not delete any existing files on your player. It also won't clobber
@@ -64,7 +77,7 @@ https://github.com/catamorphism/hplaylist
 === Known issues ===
 
 Filenames containing special characters do not currently get escaped correctly. Such files
-get ignored. You'll have to rename your Moxy Früvoustracks or copy them by hand.
+get ignored. You'll have to rename your Moxy Früvous tracks or copy them by hand.
  
 === Further questions ===
 
