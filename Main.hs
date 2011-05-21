@@ -1,10 +1,9 @@
+XXXX need to fix the README file
 {-
       TODO
        * might be good to copy files using system calls rather than by creating a shell script. (Wouldn't have to use wildcards for Unicode characters)
        * flag to delete files
-       * don't use system temp directory (have a flag to specify the name of the output script file)
        * filter out some of the rsync output
-       
 -}
 
 {- 
@@ -27,6 +26,8 @@ This program is free software: you can redistribute it and/or modify
 {-# OPTIONS -Wall #-}
 module Main(main) where
 
+import Prelude hiding (catch)
+import Control.Exception
 import Control.Monad
 import Data.Char
 import System.Cmd
@@ -39,21 +40,24 @@ import System.IO
 
 import Applescript
 import Config
+import Debug
 import Utils
+import Flags
 
-playlistsToFilenames :: [String] -> IO [(FilePath,[FilePath])]
-playlistsToFilenames fs = do
-    tmpD <- getTemporaryDirectory
+playlistsToFilenames :: [Flag] -> [String] -> IO [(FilePath,[FilePath])]
+playlistsToFilenames flags fs = do
+    tmpD <- tempDir flags
     mapM (go tmpD) fs
   where go tmpD playListName = do
-          let outFile = tmpD </> playListName <.> "m3u"
+          outFile <- uniqify $ tmpD </> playListName <.> "m3u"
           let script = playlistScript playListName outFile
           debug script
-          (appleScriptName,hdl_as) <- mkTempFileName "applescript"
+          (appleScriptName,hdl_as) <- mkSysTempFileName "applescript"
           hPutStrLn hdl_as script
           hClose hdl_as
           makeExecutable appleScriptName
           exitCode <- system appleScriptName
+          removeAFile flags appleScriptName
           case exitCode of
             ExitSuccess -> do
               songFiles <- (liftM lines) $ readFile outFile
@@ -61,7 +65,7 @@ playlistsToFilenames fs = do
               return (outFile,
                       map m4aHack songFiles)
             _           -> error ("Failed to extract playlist "
-                             ++ playListName ++ ": " ++ show exitCode)
+                               ++ playListName ++ ": " ++ show exitCode)
         rewriteM4a = mapFile m4aHack 
         m4aHack fn | takeExtension fn == ".m4a" =
           case m4aParentDir of
@@ -82,10 +86,16 @@ musicPlayerPlaylistRoot = musicPlayerRoot </> "Playlists"
 musicSubdir :: FilePath
 musicSubdir = "Music"
 
-mkTempFileName :: String -> IO (String,Handle)
-mkTempFileName s = do
-  tmp <- getTemporaryDirectory
-  openTempFile tmp ("hplaylist_" ++ s)
+mkTempFileName :: [Flag] -> String -> IO (String,Handle)
+mkTempFileName flags s = do
+  parent <- tempDir flags
+  parentExists <- doesDirectoryExist parent
+  putStrLn ("mkTempFileName: " ++ show (parent, parentExists))
+  unless parentExists
+    (throwIO (userError ("directory doesn't seem to exist: " ++ parent)))
+  outF <- uniqify $ parent </> ("hplaylist_" ++ s)
+  h <- openFile outF WriteMode
+  return (outF, h) 
 
 albumArtistTrack :: FilePath -> (FilePath,FilePath,FilePath)
 albumArtistTrack fn = (case reverse parts of
@@ -95,30 +105,39 @@ albumArtistTrack fn = (case reverse parts of
 
 generateCopyScript :: [Flag] -> [String] -> IO ()
 generateCopyScript flags playlistNames = do
-  allMusicFiles <- playlistsToFilenames playlistNames
-  debug (show allMusicFiles)
-  mapM_ fixPaths (fst (unzip allMusicFiles))
-  (copyScriptName,hdl) <- mkTempFileName "copyit"
-  let copyScript = "#!/bin/bash\n" ++ concatMap (\ (playlistFn,songs) -> 
+  allMusicFiles <- playlistsToFilenames flags playlistNames
+  let playlistFileNames = fst (unzip allMusicFiles) 
+  (do debug (show allMusicFiles)
+      mapM_ fixPaths (fst (unzip allMusicFiles))
+      (copyScriptName,hdl) <- mkTempFileName flags "copyit"
+      let copyScript = "#!/bin/bash\n" ++ concatMap (\ (playlistFn,songs) -> 
                         (rsyncCommand (isQuiet flags) playlistFn musicPlayerPlaylistRoot ++
                         concatMap (\ s -> let (artist,album,_) = albumArtistTrack s
                                               parent = musicPlayerRoot </> musicSubdir </> artist </> album in
                                               "mkdir -p " ++ (escape parent) ++ "\n"
                                               ++ rsyncCommand (isQuiet flags) s parent) songs))
                          allMusicFiles
-  hPutStrLn hdl copyScript
-  hClose hdl
-  makeExecutable copyScriptName
-  if (isDryRun flags)
-     then putStrLn ("To copy the files, execute the script " ++ copyScriptName)
-     else do
-       res <- system copyScriptName
-       case res of
-         ExitFailure _ -> putStrLn ("An error occurred: " ++ show res) >>
+      hPutStrLn hdl copyScript
+      hClose hdl
+      (do makeExecutable copyScriptName
+          if (isDryRun flags)
+             then putStrLn ("To copy the files, execute the script " ++ copyScriptName)
+             else do
+               res <- system copyScriptName
+               removeFilesOnExit flags (copyScriptName:playlistFileNames)
+               case res of
+                 ExitFailure _ -> putStrLn ("An error occurred: " ++ show res) >>
                             exitWith res
-         _ -> putStrLn ("Processed " ++ show (sum (map (length . snd)
-                          allMusicFiles)) ++ " files")
-       
+                 _ -> putStrLn ("Processed " ++ show (sum (map (length . snd)
+                          allMusicFiles)) ++ " files")) 
+            `catch` (myHandler flags copyScriptName))
+   `onException` (deleteFiles flags playlistFileNames)
+
+myHandler :: [Flag] -> FilePath -> IOException -> IO a       
+myHandler flags copyScriptName ex = do
+    removeAFile flags copyScriptName
+    throw ex
+
 -- :-(
 windowsPath :: FilePath -> FilePath
 windowsPath = map (\ c -> if c == '/' then '\\' else c)
@@ -149,29 +168,8 @@ main = do
   case getOpt Permute options args of
     (opts, playlistNames, _) ->
        case playlistNames of
-         [] -> putStrLn "You didn't give me any arguments, and that's fine!"
+         [] -> putStrLn (usageInfo "hplaylist" options) >>
+               exitWith (ExitFailure 1)
          _  -> debug ("playlists = " ++ show playlistNames) >>
                  generateCopyScript opts playlistNames
-
-options :: [OptDescr Flag]
-options = [Option ['d'] ["dry-run"] (NoArg DryRun)
-  "Don't copy any files to the music player, just generate a script to do so",
-           Option ['q'] ["quiet"] (NoArg Quiet)
-  "Don't print too much output"]
-
-data Flag = DryRun | Quiet
-  deriving Eq
-
-isDryRun :: [Flag] -> Bool
-isDryRun = (DryRun `elem`)
-
-isQuiet :: [Flag] -> Bool
-isQuiet = (Quiet `elem`)
-
-debug :: String -> IO ()
-debug s | dEBUG = putStrLn ("===\n" ++ s ++ "===")
-debug _ = return ()
-
-dEBUG :: Bool
-dEBUG = False
 
